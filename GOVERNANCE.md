@@ -85,7 +85,7 @@ All releases must:
 
 ### Reporting
 
-Security vulnerabilities must be reported to <security@psiphon.ca> rather than posted publicly.
+Security vulnerabilities must be reported to <mailto:security@psiphon.ca> rather than posted publicly.
 
 ### Disclosure Policy
 
@@ -120,7 +120,7 @@ All code reviews evaluate:
 
 - **GitHub Issues**: Bug reports, feature requests, discussions
 - **GitHub Discussions**: Community discussions and Q&A
-- **Email**: <security@psiphon.ca> for security issues
+- **Email**: <mailto:security@psiphon.ca> for security issues
 - **Pull Requests**: Code review and discussion
 
 ## Conflict Resolution
@@ -181,4 +181,4 @@ This project is licensed under the terms specified in the LICENSE file. All cont
 
 **Last Updated**: December 2025
 
-For questions about governance, please open an issue or contact the maintainers at <security@psiphon.ca>.
+For questions about governance, please open an issue or contact the maintainers at <mailto:security@psiphon.ca>.

@@ -2,7 +2,7 @@
 
 ## Reporting Security Vulnerabilities
 
-If you discover a security vulnerability in the Psiphon Linux VPN Service, please report it responsibly by emailing <security@psiphon.ca> instead of using the public issue tracker.
+If you discover a security vulnerability in the Psiphon Linux VPN Service, please report it responsibly by emailing <mailto:security@psiphon.ca> instead of using the public issue tracker.
 
 Please include:
 - Description of the vulnerability
