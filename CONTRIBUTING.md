@@ -7,7 +7,7 @@ Thank you for your interest in contributing to the Psiphon Linux VPN Service! We
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/your-username/psiphon-linux-vpn-service.git
+   git clone <https://github.com/your-username/psiphon-linux-vpn-service.git>
    cd psiphon-linux-vpn-service
    ```
 3. **Create a feature branch**:
@@ -171,7 +171,7 @@ sudo ./Psiphon-Linux-VPN-Service-Setup.sh uninstall
 
 If you find a bug:
 
-1. **Security bugs**: Email security@psiphon.ca instead of opening a public issue
+1. **Security bugs**: Email <security@psiphon.ca> instead of opening a public issue
 2. **Other bugs**: Open an issue with:
    - Clear description of the problem
    - Steps to reproduce
@@ -193,6 +193,6 @@ By contributing to this project, you agree that your contributions will be licen
 
 ## Questions?
 
-Feel free to open an issue or contact the maintainers at security@psiphon.ca for questions about contributing.
+Feel free to open an issue or contact the maintainers at <security@psiphon.ca> for questions about contributing.
 
 Thank you for helping make the Psiphon Linux VPN Service more secure and reliable!
