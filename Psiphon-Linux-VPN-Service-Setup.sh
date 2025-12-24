@@ -818,11 +818,6 @@ configure_nftables() {
     
     # Generate the nftables ruleset with proper variable expansion
     cat > "$nft_ruleset_file" << EOF
-# Remove and recreate only Psiphon-specific tables (idempotent, non-destructive)
-delete table inet psiphon_filter 2>/dev/null || true
-delete table ip psiphon_nat 2>/dev/null || true
-delete table ip6 psiphon_nat6 2>/dev/null || true
-
 # Define filter table (inet covers both IPv4 and IPv6)
 table inet psiphon_filter {
     chain input {
