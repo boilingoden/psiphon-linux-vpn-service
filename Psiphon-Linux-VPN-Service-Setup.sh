@@ -19,7 +19,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-readonly INSTALLER_VERSION="1.4.1"
+readonly INSTALLER_VERSION="1.4.2"
 # Security and Configuration Parameters
 # These values are critical for the security model - DO NOT MODIFY without understanding implications
 readonly PSIPHON_USER="psiphon-user"     # Dedicated non-root user for process isolation
