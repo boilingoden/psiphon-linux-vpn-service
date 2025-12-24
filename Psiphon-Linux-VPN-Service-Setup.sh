@@ -818,6 +818,9 @@ configure_nftables() {
     
     # Generate the nftables ruleset with proper variable expansion
     cat > "$nft_ruleset_file" << EOF
+# Remove and recreate only Psiphon-specific tables (idempotent, non-destructive)
+flush ruleset
+
 # Define filter table (inet covers both IPv4 and IPv6)
 table inet psiphon_filter {
     chain input {
@@ -1038,18 +1041,18 @@ function setup_routing() {
         sysctl -p >/dev/null 2>&1 || true
     fi
 
-    # # === Firewall Manager Compatibility ===
-    # # Stop firewalld if running to prevent interference with nftables rules
-    # # firewalld manages its own nftables tables and will clear our rules on reload
-    # log "Checking for firewall managers that might interfere..."
-    # if systemctl is-active --quiet firewalld 2>/dev/null; then
-    #     log "firewalld is active - stopping to prevent nftables rule conflicts"
-    #     if systemctl stop firewalld 2>/dev/null; then
-    #         log "✓ firewalld stopped (we'll manage firewall rules directly via nftables)"
-    #     else
-    #         warning "Could not stop firewalld (may have permission issues)"
-    #     fi
-    # fi
+    # === Firewall Manager Compatibility ===
+    # Stop firewalld if running to prevent interference with nftables rules
+    # firewalld manages its own nftables tables and will clear our rules on reload
+    log "Checking for firewall managers that might interfere..."
+    if systemctl is-active --quiet firewalld 2>/dev/null; then
+        log "firewalld is active - stopping to prevent nftables rule conflicts"
+        if systemctl stop firewalld 2>/dev/null; then
+            log "✓ firewalld stopped (we'll manage firewall rules directly via nftables)"
+        else
+            warning "Could not stop firewalld (may have permission issues)"
+        fi
+    fi
 
     # Create initial nftables ruleset
     log "Setting up nftables ruleset..."
@@ -1988,9 +1991,8 @@ function cleanup_routing() {
     # Only remove Psiphon-specific tables, leaving all other nftables intact
     cat > "$cleanup_script_file" << 'EOF'
 # Remove only Psiphon-specific tables, preserve all other rules
-delete table inet psiphon_filter
-delete table ip psiphon_nat
-delete table ip6 psiphon_nat6
+flush rulset
+
 EOF
     
     # Apply the cleanup script to remove only our tables
@@ -2032,15 +2034,15 @@ EOF
         fi
     fi
 
-    # # Restart firewalld if it was stopped by us (restores system firewall management)
-    # if systemctl is-enabled firewalld &>/dev/null 2>&1; then
-    #     log "Restarting firewalld to restore system firewall management..."
-    #     if systemctl start firewalld 2>/dev/null; then
-    #         log "✓ firewalld restarted successfully"
-    #     else
-    #         warning "Could not restart firewalld (manual restart may be needed)"
-    #     fi
-    # fi
+    # Restart firewalld if it was stopped by us (restores system firewall management)
+    if systemctl is-enabled firewalld &>/dev/null 2>&1; then
+        log "Restarting firewalld to restore system firewall management..."
+        if systemctl start firewalld 2>/dev/null; then
+            log "✓ firewalld restarted successfully"
+        else
+            warning "Could not restart firewalld (manual restart may be needed)"
+        fi
+    fi
 
     success "Routing and firewall rules cleaned up."
 }
