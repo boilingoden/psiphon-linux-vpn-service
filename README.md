@@ -30,7 +30,7 @@ cd psiphon-client-linux-service
 sudo ./Psiphon-Linux-VPN-Service-Setup.sh install
 ```
 
-## 🔧 Usage
+## � Quick Start
 
 ```bash
 # Show all available commands
@@ -52,6 +52,22 @@ sudo systemctl reload psiphon-tun
 sudo systemctl Restart psiphon-tun
 ```
 
+→ **Full documentation in [docs/](docs/) directory** ✨
+
+## 📚 Documentation
+
+Start here:
+- **[Getting Started](docs/GETTING-STARTED.md)** (5 min) - Install & test
+- **[Commands Reference](docs/COMMANDS.md)** - All commands
+- **[Configuration](docs/CONFIGURATION.md)** - Settings + 5 presets
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix problems
+- **[FAQ](docs/FAQ.md)** - Quick answers
+- **[Usage & Commands](docs/USAGE.md)** - How to use
+- **[Security](docs/SECURITY.md)** - Kill switch, DNS, isolation
+- **[Network Setup](docs/NETWORK.md)** - Network details
+
+See [docs/README.md](docs/README.md) for full documentation index.
+
 Configuration: `/opt/psiphon-tun/psiphon/psiphon.config`
 
 ## 🔍 Network Info
@@ -72,7 +88,10 @@ sudo systemctl status psiphon-binary.service
 
 # Test connection
 sudo ./Psiphon-Linux-VPN-Service-Setup.sh status
+sudo ./Psiphon-Linux-VPN-Service-Setup.sh diagnose
 ```
+
+**See [Troubleshooting](docs/TROUBLESHOOTING.md) guide**
 
 ## 📄 License
 
