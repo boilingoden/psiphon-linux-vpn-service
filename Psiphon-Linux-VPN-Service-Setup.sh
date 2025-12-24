@@ -151,7 +151,7 @@ function acquire_lock() {
 function check_dependencies() {
     local missing_tools=()
 
-    for tool in wget curl unzip ip nft; do
+    for tool in wget curl unzip ip nft jq dig; do
         if ! command -v "$tool" >/dev/null 2>&1; then
             missing_tools+=("$tool")
         fi
@@ -166,6 +166,8 @@ function check_dependencies() {
             for tool in "${missing_tools[@]}"; do
                 if [ "$tool" = "nft" ]; then
                     packages_to_install+=("nftables")
+                elif [ "$tool" = "dig" ]; then
+                    packages_to_install+=("dnsutils")
                 else
                     packages_to_install+=("$tool")
                 fi
@@ -177,6 +179,8 @@ function check_dependencies() {
             for tool in "${missing_tools[@]}"; do
                 if [ "$tool" = "nft" ]; then
                     packages_to_install+=("nftables")
+                elif [ "$tool" = "dig" ]; then
+                    packages_to_install+=("bind-utils")
                 else
                     packages_to_install+=("$tool")
                 fi
@@ -188,6 +192,8 @@ function check_dependencies() {
             for tool in "${missing_tools[@]}"; do
                 if [ "$tool" = "nft" ]; then
                     packages_to_install+=("nftables")
+                elif [ "$tool" = "dig" ]; then
+                    packages_to_install+=("bind")
                 else
                     packages_to_install+=("$tool")
                 fi
@@ -416,6 +422,10 @@ EOF
     # ,
     # "EstablishTunnelTimeoutSeconds": 360,
     # "TunnelPoolSize": 1
+    #
+    # also for WARP test:
+    # "UpstreamProxyURL": "socks5://127.0.0.1:40000",
+    #
 
     chown "$PSIPHON_USER:$PSIPHON_GROUP" "$PSIPHON_CONFIG_FILE"
     chmod 600 "$PSIPHON_CONFIG_FILE"
@@ -524,7 +534,7 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
 ReadWritePaths=$INSTALL_DIR /var/log
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_SYS_RESOURCE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE
 SecureBits=noroot-locked
 ProtectClock=no
@@ -563,7 +573,7 @@ Requires=graphical.target
 Type=oneshot
 Environment="DISPLAY=:0"
 Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$ACTIVE_USER_ID/bus"
-ExecStart=/bin/sh -c 'journalctl -u psiphon-binary -n 5 --no-pager 2>/dev/null | grep -q "Tunnels.*count.*1" && notify-send -a "$SERVICE_CONFIGURE_NAME" -u critical -i network-vpn -t 10000 "Psiphon Connected" || notify-send -a "$SERVICE_CONFIGURE_NAME" -u normal -i network-vpn-disconnected -t 10000 "Psiphon Status Changed" "run: systemctl status psiphon-binary to check connection status"'
+ExecStart=/bin/sh -c 'journalctl -u $SERVICE_BINARY_NAME -n 5 --no-pager 2>/dev/null | grep -q "Tunnels.*count.*1" && notify-send -a "$SERVICE_CONFIGURE_NAME" -u critical -i network-vpn -t 10000 "Psiphon Connected" || notify-send -a "$SERVICE_CONFIGURE_NAME" -u normal -i network-vpn-disconnected -t 10000 "Psiphon Status Changed" "run: systemctl status $SERVICE_BINARY_NAME to check connection status"'
 User=$ACTIVE_USER
 
 # TODO: Make this open the URL in the user's default browser **securely**
@@ -808,8 +818,10 @@ configure_nftables() {
     
     # Generate the nftables ruleset with proper variable expansion
     cat > "$nft_ruleset_file" << EOF
-# Clear any existing rules but maintain structure
-flush ruleset
+# Remove and recreate only Psiphon-specific tables (idempotent, non-destructive)
+delete table inet psiphon_filter 2>/dev/null || true
+delete table ip psiphon_nat 2>/dev/null || true
+delete table ip6 psiphon_nat6 2>/dev/null || true
 
 # Define filter table (inet covers both IPv4 and IPv6)
 table inet psiphon_filter {
@@ -1031,18 +1043,18 @@ function setup_routing() {
         sysctl -p >/dev/null 2>&1 || true
     fi
 
-    # === Firewall Manager Compatibility ===
-    # Stop firewalld if running to prevent interference with nftables rules
-    # firewalld manages its own nftables tables and will clear our rules on reload
-    log "Checking for firewall managers that might interfere..."
-    if systemctl is-active --quiet firewalld 2>/dev/null; then
-        log "firewalld is active - stopping to prevent nftables rule conflicts"
-        if systemctl stop firewalld 2>/dev/null; then
-            log "✓ firewalld stopped (we'll manage firewall rules directly via nftables)"
-        else
-            warning "Could not stop firewalld (may have permission issues)"
-        fi
-    fi
+    # # === Firewall Manager Compatibility ===
+    # # Stop firewalld if running to prevent interference with nftables rules
+    # # firewalld manages its own nftables tables and will clear our rules on reload
+    # log "Checking for firewall managers that might interfere..."
+    # if systemctl is-active --quiet firewalld 2>/dev/null; then
+    #     log "firewalld is active - stopping to prevent nftables rule conflicts"
+    #     if systemctl stop firewalld 2>/dev/null; then
+    #         log "✓ firewalld stopped (we'll manage firewall rules directly via nftables)"
+    #     else
+    #         warning "Could not stop firewalld (may have permission issues)"
+    #     fi
+    # fi
 
     # Create initial nftables ruleset
     log "Setting up nftables ruleset..."
@@ -1316,6 +1328,78 @@ function diagnose_network_issues() {
         log "Current resolv.conf:"
         head -5 /etc/resolv.conf | sed 's/^/   /'
     fi
+
+    # DNS leak detection (passive and active checks)
+    log ""
+    log "5.a DNS Leak Detection Tests:"
+    
+    # Only perform DNS leak detection if Psiphon is connected
+    if ! pgrep -f "psiphon-tunnel-core" >/dev/null 2>&1; then
+        log "   - Psiphon not running, skipping DNS leak tests (results invalid without tunnel)"
+    else
+        # Passive check: verify routes to configured DNS servers go via TUN interface
+        IFS=',' read -ra _dns4 <<< "$TUN_DNS_SERVERS"
+        local _dns_leak_found=0
+        
+        log "   Checking IPv4 DNS server routes:"
+        for _dns in "${_dns4[@]}"; do
+            _dns=$(echo "$_dns" | xargs)
+            if [ -z "$_dns" ]; then
+                continue
+            fi
+            _route=$(ip route get "$_dns" 2>/dev/null || true)
+            if echo "$_route" | grep -q "dev $TUN_INTERFACE"; then
+                log "      ✓ $_dns via $TUN_INTERFACE (no leak)"
+            else
+                log "      ✗ $_dns NOT via $TUN_INTERFACE (LEAK DETECTED). Route: ${_route:-N/A}"
+                _dns_leak_found=1
+            fi
+        done
+
+        IFS=',' read -ra _dns6 <<< "$TUN_DNS_SERVERS6"
+        log "   Checking IPv6 DNS server routes:"
+        for _dns in "${_dns6[@]}"; do
+            _dns=$(echo "$_dns" | xargs)
+            if [ -z "$_dns" ]; then
+                continue
+            fi
+            _route6=$(ip -6 route get "$_dns" 2>/dev/null || true)
+            if echo "$_route6" | grep -q "dev $TUN_INTERFACE"; then
+                log "      ✓ $_dns via $TUN_INTERFACE (no leak)"
+            else
+                log "      ✗ $_dns NOT via $TUN_INTERFACE (LEAK DETECTED). Route: ${_route6:-N/A}"
+                _dns_leak_found=1
+            fi
+        done
+
+        # Active check: attempt DNS resolution via configured servers if `dig` is available
+        if command -v dig >/dev/null 2>&1; then
+            log ""
+            log "   Active DNS resolution tests (via dig, timeout 5s):"
+            for _dns in "${_dns4[@]}"; do
+                _dns=$(echo "$_dns" | xargs)
+                if [ -z "$_dns" ]; then
+                    continue
+                fi
+                if timeout 5 dig +time=2 +tries=1 @"$_dns" +short example.com >/dev/null 2>&1; then
+                    log "      ✓ Resolution via $_dns succeeded"
+                else
+                    log "      ✗ Resolution via $_dns failed (timeout or unreachable)"
+                fi
+            done
+        else
+            log "   - dig not installed, skipping active resolution tests"
+        fi
+
+        if [ $_dns_leak_found -eq 0 ]; then
+            log ""
+            log "   ✓ DNS LEAK TEST PASSED: All DNS servers routed through tunnel"
+        else
+            log ""
+            log "   ✗ DNS LEAK TEST FAILED: Some DNS servers are NOT routed through tunnel"
+        fi
+    fi
+
 
     # Connectivity tests
     log ""
@@ -1953,15 +2037,15 @@ EOF
         fi
     fi
 
-    # Restart firewalld if it was stopped by us (restores system firewall management)
-    if systemctl is-enabled firewalld &>/dev/null 2>&1; then
-        log "Restarting firewalld to restore system firewall management..."
-        if systemctl start firewalld 2>/dev/null; then
-            log "✓ firewalld restarted successfully"
-        else
-            warning "Could not restart firewalld (manual restart may be needed)"
-        fi
-    fi
+    # # Restart firewalld if it was stopped by us (restores system firewall management)
+    # if systemctl is-enabled firewalld &>/dev/null 2>&1; then
+    #     log "Restarting firewalld to restore system firewall management..."
+    #     if systemctl start firewalld 2>/dev/null; then
+    #         log "✓ firewalld restarted successfully"
+    #     else
+    #         warning "Could not restart firewalld (manual restart may be needed)"
+    #     fi
+    # fi
 
     success "Routing and firewall rules cleaned up."
 }
