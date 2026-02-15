@@ -1,0 +1,149 @@
+name: ShellCheck Security Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '17 3 * * 0'
+
+permissions:
+  contents: read
+  security-events: write
+  checks: write
+
+jobs:
+  shellcheck:
+    name: ShellCheck Analysis
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.analysis.outputs.result }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck Analysis
+        id: analysis
+        run: |
+          set +e  # Don't exit on error, we want to capture results
+          
+          # Run shellcheck and generate JSON report
+          shellcheck -f json Psiphon-Linux-VPN-Service-Setup.sh > shellcheck-report.json 2>&1
+          SHELLCHECK_EXIT=$?
+          
+          # Count issues
+          TOTAL_ISSUES=$(jq 'length' shellcheck-report.json 2>/dev/null || echo 0)
+          ERRORS=$(jq '[.[] | select(.level=="error")] | length' shellcheck-report.json 2>/dev/null || echo 0)
+          WARNINGS=$(jq '[.[] | select(.level=="warning")] | length' shellcheck-report.json 2>/dev/null || echo 0)
+          
+          echo "result=success" >> $GITHUB_OUTPUT
+          if [ $TOTAL_ISSUES -gt 0 ]; then
+            echo "result=failure" >> $GITHUB_OUTPUT
+          fi
+          
+          # Export for step summary
+          echo "TOTAL_ISSUES=$TOTAL_ISSUES" >> $GITHUB_ENV
+          echo "ERRORS=$ERRORS" >> $GITHUB_ENV
+          echo "WARNINGS=$WARNINGS" >> $GITHUB_ENV
+          
+          exit $SHELLCHECK_EXIT
+        continue-on-error: true
+
+      - name: Generate SARIF Report
+        if: always()
+        run: |
+          # Convert JSON to SARIF format for GitHub Security tab
+          python3 << 'EOF'
+          import json
+          
+          try:
+              with open('shellcheck-report.json', 'r') as f:
+                  issues = json.load(f)
+          except:
+              issues = []
+          
+          sarif = {
+              "version": "2.1.0",
+              "runs": [{
+                  "tool": {
+                      "driver": {
+                          "name": "ShellCheck",
+                          "version": "latest",
+                          "informationUri": "https://www.shellcheck.net/"
+                      }
+                  },
+                  "results": []
+              }]
+          }
+          
+          for issue in issues:
+              result = {
+                  "ruleId": issue.get('code', 'UNKNOWN'),
+                  "message": {"text": issue.get('message', '')},
+                  "locations": [{
+                      "physicalLocation": {
+                          "artifactLocation": {"uri": issue.get('file', 'unknown')},
+                          "region": {
+                              "startLine": issue.get('line', 0),
+                              "startColumn": issue.get('column', 0)
+                          }
+                      }
+                  }],
+                  "level": "warning" if issue.get('level') == "warning" else "error"
+              }
+              sarif["runs"][0]["results"].append(result)
+          
+          with open('results.sarif', 'w') as f:
+              json.dump(sarif, f, indent=2)
+          EOF
+
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+          wait-for-processing: true
+
+      - name: Create Job Summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # ShellCheck Security Scan Report
+          
+          | Metric | Count |
+          |--------|-------|
+          | Total Issues | ${{ env.TOTAL_ISSUES }} |
+          | Errors | ${{ env.ERRORS }} |
+          | Warnings | ${{ env.WARNINGS }} |
+          
+          ## Details
+          <details>
+          <summary>Full Report</summary>
+          
+          ```json
+          $(cat shellcheck-report.json)
+          ```
+          </details>
+          
+          ---
+          **Scanned Files:**
+          - `Psiphon-Linux-VPN-Service-Setup.sh`
+          
+          EOF
+
+      - name: Fail if issues found
+        if: env.TOTAL_ISSUES > 0
+        run: |
+          echo "❌ ShellCheck found ${{ env.TOTAL_ISSUES }} issue(s)"
+          cat shellcheck-report.json | jq '.' || true
+          exit 1
+
+      - name: Success message
+        if: env.TOTAL_ISSUES == 0
+        run: echo "✅ All ShellCheck scans passed!"
