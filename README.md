@@ -2,7 +2,7 @@
 
 System-wide Psiphon VPN service for Linux with absolute kill-switch protection. Zero-trust networking model: all traffic must go through VPN or is blocked; non-root user isolation for Psiphon binary.
 
-[![Codacy Security Scan](https://github.com/boilingoden/psiphon-client-linux-service/actions/workflows/codacy.yml/badge.svg)](https://github.com/boilingoden/psiphon-client-linux-service/actions/workflows/codacy.yml)
+[![ShellCheck](https://github.com/boilingoden/psiphon-linux-vpn-service/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/boilingoden/psiphon-linux-vpn-service/actions/workflows/shellcheck.yml)
 
 ## 🛡️ Key Features
 
