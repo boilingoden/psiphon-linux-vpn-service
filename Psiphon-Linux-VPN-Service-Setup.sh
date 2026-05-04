@@ -1697,6 +1697,13 @@ function wait_for_psiphon_connection() {
                     success "Psiphon connected successfully"
                     return 0
                 fi
+
+                # Check if we encounter connection time out
+                if echo "$current_content" | grep -q "EstablishTunnelTimeout"; then
+                    echo ""
+                    warning "Psiphon failed to connect!"
+                    return 1
+                fi
                 
                 # Also check if the log file is growing (process is active)
                 if ! echo "$current_content" | grep -q "Error\|error\|FATAL\|fatal"; then
@@ -2457,6 +2464,11 @@ function status() {
     sleep 1
     echo -e "External IPv6 SOCKS port:\n$(timeout 10 curl -6sSm 7 -x "socks5://[::ffff:127.0.0.1]:$SOCKS_PORT" https://cloudflare.com/cdn-cgi/trace)"
     echo ""
+    sleep 1
+    echo -e "External IPv4 SOCKS port google gio-ip lat-lon:\n$(timeout 10 curl -4sSm 7 -x socks5://127.0.0.1:$SOCKS_PORT https://locate.measurementlab.net/v2/nearest/neubot/dash -o /dev/null -w "%header{x-locate-clientlatlon}\n")"
+    echo ""
+    sleep 1
+    echo -e "External IPv6 SOCKS port google gio-ip lat-lon:\n$(timeout 10 curl -6sSm 7 -x "socks5://[::ffff:127.0.0.1]:$SOCKS_PORT" https://locate.measurementlab.net/v2/nearest/neubot/dash -o /dev/null -w "%header{x-locate-clientlatlon}\n")"
 }
 
 # Update Psiphon
